@@ -13,6 +13,14 @@ const port = process.env.PORT || 3000
 const crypto = require("crypto");
 const { send } = require('process');
 
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./go-parcel-firebase-adminsdk.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
 function generateTrackingId() {
     const prefix = "PRCL";
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -21,10 +29,33 @@ function generateTrackingId() {
     return `${prefix}-${date}-${random}`;
 }
 
-// MIDDLEWARE --> 
+// MIDDLEWARE -->  
 
 app.use(express.json());
 app.use(cors());
+
+const verifyFBToken = async (req, res, next) => {
+    // console.log('Headers In The Middleware', req.headers.authorization)
+    const token = req.headers.authorization;
+
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorized access ' })
+    }
+
+    try {
+        const idToken = token.split(' ')[1];
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        console.log('Decoded In The Token', decoded);
+        req.decoded_email = decoded.email;
+
+        next();
+
+    }
+    catch (err) {
+        // return res.send(401).send({ message: 'unauthorize access' })
+        return res.status(401).send({ message: 'unauthorized access' });
+    }
+}
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.zrfyfih.mongodb.net/?appName=Cluster0`;
@@ -161,15 +192,15 @@ async function run() {
             // console.log('Session Retrieve : ', session);
 
             const transactionId = session.payment_intent;
-            const query = { transactionId: transactionId } 
+            const query = { transactionId: transactionId }
 
-            const paymentExists = await paymentCollection.findOne( query );
+            const paymentExists = await paymentCollection.findOne(query);
             console.log(paymentExists);
 
-            if ( paymentExists ) {
-                
-                return res.send({ 
-                    message: 'Already Exist', 
+            if (paymentExists) {
+
+                return res.send({
+                    message: 'Already Exist',
                     transactionId,
                     trackingId: paymentExists.trackingId
                 })
@@ -198,18 +229,18 @@ async function run() {
                     paymentStatus: session.payment_status,
                     paidAt: new Date(),
                     trackingId: trackingId
-                    
+
                 }
 
                 if (session.payment_status === 'paid') {
                     const resultPayment = await paymentCollection.insertOne(payment);
 
-                    res.send({ 
-                        success: true, 
-                        modifyParcel: result, 
+                    res.send({
+                        success: true,
+                        modifyParcel: result,
                         trackingId: trackingId,
                         transactionId: session.payment_intent,
-                        paymentInfo: resultPayment 
+                        paymentInfo: resultPayment
                     })
                 }
 
@@ -219,13 +250,22 @@ async function run() {
         })
 
         // PAYMENT RELATED API'S -->
-        app.get('/payments', async (req, res) => {
+        app.get('/payments', verifyFBToken, async (req, res) => {
             const email = req.query.email;
             const query = {}
-            if(email) {
-                query.customerEmail = email
+
+            // console.log('Headers',req.headers);
+
+
+            if (email) {
+                query.customerEmail = email;
+
+                // check email address ->
+                if(email !== req.decoded_email) {
+                    return res.status(403).send({ message: 'forbidden access'})
+                }
             }
-            const cursor = paymentCollection.find(query);
+            const cursor = paymentCollection.find(query).sort({paidAt: -1});
             const result = await cursor.toArray();
             res.send(result)
         })
