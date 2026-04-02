@@ -16,6 +16,7 @@ const { send } = require('process');
 const admin = require("firebase-admin");
 
 const serviceAccount = require("./go-parcel-firebase-adminsdk.json");
+const { status } = require('express/lib/response');
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -80,6 +81,7 @@ async function run() {
         const userCollection = db.collection('users');
         const parcelsCollection = db.collection('parcels');
         const paymentCollection = db.collection('payments');
+        const ridersCollection = db.collection('riders');
 
 
         // USER'S RELATED API'S -->
@@ -87,6 +89,13 @@ async function run() {
             const user = req.body;
             user.role = 'user';
             user.createdAt = new Date();
+
+            const email = user.email;
+            const userExists = await userCollection.findOne({email})
+
+            if(userExists) {
+                return res.send({message: 'User Exists.!'})
+            }
 
             const result = await userCollection.insertOne(user);
             res.send(result);
@@ -279,6 +288,29 @@ async function run() {
             const cursor = paymentCollection.find(query).sort({ paidAt: -1 });
             const result = await cursor.toArray();
             res.send(result)
+        })
+
+        // RIDER RELATED API --> 
+        
+        app.get('/riders', async(req, res) => {
+            const query = {}
+            if( req.query.status ) {
+                query.status = req.query.status;
+            }
+            const cursor = ridersCollection.find(query)
+            const result = await cursor.toArray();
+            res.send(result);
+
+        })
+        
+        app.post('/riders', async(req, res) => {
+            const rider = req.body;
+            rider.status = 'pending';
+            rider.createdAt = new Date();
+
+            const result = await ridersCollection.insertOne(rider);
+            res.send(result);
+
         })
 
         // Send a ping to confirm a successful connection
