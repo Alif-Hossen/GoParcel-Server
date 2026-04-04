@@ -88,22 +88,42 @@ async function run() {
         // MIDDLEWARE ADMIN BEFORE ALLOWING ADMIN ACTION --> 
         // MUST BE USED AFTER VERIFY'FB'TOKEN MIDDLEWARE --> 
 
-        const verifyAdmin = async(req, res, next) => {
+        const verifyAdmin = async (req, res, next) => {
             const email = req.decoded_email;
             const query = { email };
             const user = await userCollection.findOne(query);
 
-            if( !user || user.role !== 'admin') {
-                return res.status(403).send({message: 'forbidden access' });
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
             }
 
             next();
         }
 
-        // USER'S RELATED API'S -->
 
-        app.get('/users', verifyFBToken, async(req, res) => {
-            const cursor = userCollection.find();
+        // ----------------------- //
+        // USER'S RELATED API'S -->
+        // ----------------------- //
+
+
+        app.get('/users', verifyFBToken, async (req, res) => {
+
+            const searchText = req.query.searchText;
+            const query = {};
+            if (searchText) {
+                // query.displayName = { $regex: searchText, $options: 'i' }
+
+                query.$or = [
+                    { displayName: { $regex: searchText, $options: 'i' } },
+                    { email: { $regex: searchText, $options: 'i' } },
+                ]
+
+            }
+
+
+            const cursor = userCollection.find(query).sort({ createdAt: -1 }).limit(5
+
+            );
             const result = await cursor.toArray();
             res.send(result);
         })
@@ -116,21 +136,21 @@ async function run() {
         app.get('/users/:email/role', async (req, res) => {
             const email = req.params.email;
             const query = { email }
-            const user = await userCollection.findOne( query );
+            const user = await userCollection.findOne(query);
             res.send({ role: user?.role || 'user' })
         })
 
 
-        app.post('/users', async( req, res ) => {
+        app.post('/users', async (req, res) => {
             const user = req.body;
             user.role = 'user';
             user.createdAt = new Date();
 
             const email = user.email;
-            const userExists = await userCollection.findOne({email})
+            const userExists = await userCollection.findOne({ email })
 
-            if(userExists) {
-                return res.send({message: 'User Exists.!'})
+            if (userExists) {
+                return res.send({ message: 'User Exists.!' })
             }
 
             const result = await userCollection.insertOne(user);
@@ -138,7 +158,7 @@ async function run() {
         })
 
 
-        app.patch('/users/:id/role', verifyFBToken, verifyAdmin, async(req, res ) => {
+        app.patch('/users/:id/role', verifyFBToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const roleInfo = req.body;
             const query = { _id: new ObjectId(id) }
@@ -154,10 +174,11 @@ async function run() {
 
 
 
-
-
-
+        // -------------------- //
         // PARCEL API --------->
+        // -------------------- //
+
+
         app.get('/parcels', async (req, res) => {
             const query = {}
             const { email } = req.query;
@@ -197,8 +218,13 @@ async function run() {
             res.send(result);
         })
 
+
+        // ------------------------- //
         // PAYMENT RELATED API'S -->
+        // ------------------------- //
+
         // CREATE NEW ->
+
         app.post('/payment-checkout-session', async (req, res) => {
             const paymentInfo = req.body;
             const amount = parseInt(paymentInfo.cost) * 100;
@@ -325,7 +351,12 @@ async function run() {
             res.send({ success: false })
         })
 
+
+        // ------------------------- //
         // PAYMENT RELATED API'S -->
+        // ------------------------- //
+
+
         app.get('/payments', verifyFBToken, async (req, res) => {
             const email = req.query.email;
             const query = {}
@@ -346,20 +377,24 @@ async function run() {
             res.send(result)
         })
 
+
+        // --------------------- //
         // RIDER RELATED API --> 
-        
-        app.get('/riders', async(req, res) => {
-             const query = {}
-            if( req.query.status ) {
+        // --------------------- //
+
+
+        app.get('/riders', async (req, res) => {
+            const query = {}
+            if (req.query.status) {
                 query.status = req.query.status;
             }
             const cursor = ridersCollection.find(query)
             const result = await cursor.toArray();
             res.send(result);
 
-        }) 
-        
-        app.post('/riders', async(req, res) => {
+        })
+
+        app.post('/riders', async (req, res) => {
             const rider = req.body;
             rider.status = 'pending';
             rider.createdAt = new Date();
@@ -369,26 +404,26 @@ async function run() {
 
         })
 
-        app.patch('/riders/:id', verifyFBToken, verifyAdmin, async(req, res) => {
+        app.patch('/riders/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             const status = req.body.status;
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const updatedDoc = {
-                $set : {
+                $set: {
                     status: status
                 }
             }
 
             const result = await ridersCollection.updateOne(query, updatedDoc);
 
-            if(status === 'approved') {
+            if (status === 'approved') {
                 const email = req.body.email;
                 const userQuery = { email }
                 const updateUser = {
                     $set: {
                         role: 'rider'
                     }
-                     
+
                 }
                 const userResult = await userCollection.updateOne(userQuery, updateUser);
             }
