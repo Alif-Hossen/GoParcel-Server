@@ -200,15 +200,15 @@ async function run() {
 
         })
 
-        app.get('/parcels/rider', async(req, res) => {
+        app.get('/parcels/rider', async (req, res) => {
             const { riderEmail, deliveryStatus } = req.query;
-            const query = { }
+            const query = {}
 
-            if(riderEmail) {
+            if (riderEmail) {
                 query.riderEmail = riderEmail
             }
-            if(deliveryStatus) {
-                query.deliveryStatus = deliveryStatus
+            if (deliveryStatus) {
+                query.deliveryStatus = {$in: ['driver_assigned', 'rider_arriving']}
             }
 
             const cursor = parcelsCollection.find(query)
@@ -262,6 +262,19 @@ async function run() {
             const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc);
 
             res.send(riderResult);
+
+        })
+
+        app.patch('/parcels/:id/status', async(req, res) => {
+            const { deliveryStatus } = req.body;
+            const query = {_id: new ObjectId(req.params.id) }
+            const updatedDoc = {
+                $set: {
+                    deliveryStatus: deliveryStatus
+                }
+            }
+            const result = await parcelsCollection.updateOne(query, updatedDoc)
+            res.send(result);
 
         })
 
